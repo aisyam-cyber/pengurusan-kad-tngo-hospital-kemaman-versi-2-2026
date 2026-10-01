@@ -1,0 +1,832 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sistem Pengurusan Kad Touch 'n Go - Hospital Kemaman</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = { theme: { extend: { fontFamily: { sans: ['Poppins', 'sans-serif'] }, colors: { hospital: { 50: '#f0f9ff', 100: '#e0f2fe', 500: '#0284c7', 800: '#075985', 900: '#0c4a6e' }, navy: { 800: '#1e293b', 900: '#0f172a' } } } } }
+  </script>
+  <style>.custom-scrollbar::-webkit-scrollbar{width:6px}.custom-scrollbar::-webkit-scrollbar-track{background:#f1f1f1}.custom-scrollbar::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:4px}</style>
+</head>
+<body class="bg-slate-100 font-sans text-slate-800 antialiased min-h-screen flex flex-col">
+
+  <script>
+    // ⚠️ GANTIKAN DENGAN WEB APP URL GOOGLE APPS SCRIPT SEBENAR ANDA
+    const API_URL = "https://script.google.com/a/macros/moh.gov.my/s/AKfycbyOAfA0c9Uu6y8zrtfIMIb5NTfAqNJJ9SJDPNowrEdNi4KNmOaFTuP_sB0EQd_9h0y9nQ/exec";
+  </script>
+
+  <!-- OVERLAY LOADING & NOTIFIKASI -->
+  <div id="loadingOverlay" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center hidden">
+    <div class="bg-white p-6 rounded-2xl shadow-2xl flex flex-col items-center gap-4 border border-slate-100">
+      <div class="w-12 h-12 border-4 border-hospital-500 border-t-transparent rounded-full animate-spin"></div>
+      <p class="font-semibold text-slate-700 text-sm animate-pulse">Memproses data...</p>
+    </div>
+  </div>
+  <div id="toastContainer" class="fixed top-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+  <!-- PAPARAN LOG MASUK -->
+  <div id="loginScreen" class="fixed inset-0 z-30 flex items-center justify-center bg-gradient-to-br from-navy-900 via-hospital-900 to-slate-900 p-4">
+    <div class="bg-white rounded-3xl shadow-2xl border border-white/20 p-8 max-w-md w-full space-y-6">
+      <div class="text-center space-y-2">
+        <div class="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-hospital-50 text-hospital-500 mb-2">
+          <i class="fa-solid fa-credit-card text-3xl"></i>
+        </div>
+        <h1 class="text-xl font-bold text-slate-800">SISTEM REKOD PENGGUNAAN KAD TNG</h1>
+        <p class="text-xs font-semibold uppercase text-hospital-800">Hospital Kemaman</p>
+      </div>
+      <form id="loginForm" onsubmit="handleLoginSubmit(event)" class="space-y-4">
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">ID Pengguna</label>
+          <input type="text" id="loginUserId" required placeholder="Contoh: DRV5469 / SUP5055" class="w-full px-4 py-3 bg-slate-50 border rounded-xl text-sm focus:ring-2 focus:ring-hospital-500 outline-none">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">PIN Login</label>
+          <input type="password" id="loginPin" required maxlength="6" placeholder="****" class="w-full px-4 py-3 bg-slate-50 border rounded-xl text-sm focus:ring-2 focus:ring-hospital-500 outline-none">
+        </div>
+        <button type="submit" class="w-full py-3 bg-hospital-500 hover:bg-hospital-800 text-white font-semibold rounded-xl text-sm transition">LOG MASUK</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- APLIKASI UTAMA -->
+  <div id="appContainer" class="hidden flex-1 flex flex-col md:flex-row overflow-hidden">
+    <aside id="sidebar" class="w-64 bg-navy-900 text-slate-300 flex-shrink-0 flex flex-col justify-between hidden md:flex z-20">
+      <div>
+        <div class="p-5 border-b border-slate-800 flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-hospital-500 text-white flex items-center justify-center font-bold text-lg"><i class="fa-solid fa-hospital-user"></i></div>
+          <div>
+            <h2 class="font-bold text-white text-xs uppercase tracking-wider">HOSPITAL KEMAMAN</h2>
+            <p class="text-[11px] text-hospital-500 font-semibold">Rekod Penggunaan Kad</p>
+          </div>
+        </div>
+        <nav class="p-3 space-y-1 text-sm custom-scrollbar overflow-y-auto max-h-[calc(100vh-140px)]">
+          <button onclick="switchTab('dashboard')" class="nav-btn w-full flex items-center gap-3 px-4 py-2.5 rounded-xl hover:bg-slate-800 text-left" data-tab="dashboard"><i class="fa-solid fa-chart-pie w-5 text-hospital-500"></i> Dashboard</button>
+          <button onclick="switchTab('cards')" class="nav-btn w-full flex items-center gap-3 px-4 py-2.5 rounded-xl hover:bg-slate-800 text-left" data-tab="cards"><i class="fa-solid fa-credit-card w-5 text-hospital-500"></i> Senarai Kad TnG</button>
+          <button onclick="switchTab('issueCard')" class="nav-btn w-full flex items-center gap-3 px-4 py-2.5 rounded-xl hover:bg-slate-800 text-left" data-tab="issueCard"><i class="fa-solid fa-hand-holding w-5 text-emerald-400"></i> Ambil Kad</button>
+          <button onclick="switchTab('returnCard')" class="nav-btn w-full flex items-center gap-3 px-4 py-2.5 rounded-xl hover:bg-slate-800 text-left" data-tab="returnCard"><i class="fa-solid fa-box-archive w-5 text-amber-400"></i> Pulangkan Kad</button>
+          <button onclick="switchTab('analytics')" class="nav-btn w-full flex items-center gap-3 px-4 py-2.5 rounded-xl hover:bg-slate-800 text-left" data-tab="analytics"><i class="fa-solid fa-chart-line w-5 text-sky-400"></i> Laporan Penggunaan</button>
+        </nav>
+      </div>
+      <div class="p-4 border-t border-slate-800">
+        <button onclick="handleLogout()" class="w-full flex items-center justify-center gap-2 py-2 px-4 bg-rose-500/10 text-rose-400 rounded-xl text-sm font-medium"><i class="fa-solid fa-right-from-bracket"></i> Log Keluar</button>
+      </div>
+    </aside>
+
+    <div class="flex-1 flex flex-col min-w-0 bg-slate-50 overflow-hidden">
+      <header class="bg-white border-b px-6 py-4 flex items-center justify-between shadow-sm z-10">
+        <div class="flex items-center gap-4">
+          <button onclick="toggleMobileSidebar()" class="md:hidden text-slate-600"><i class="fa-solid fa-bars text-xl"></i></button>
+          <h1 id="pageTitle" class="text-lg font-bold text-slate-800">Dashboard Utama</h1>
+        </div>
+        <div class="flex items-center gap-4">
+          <button onclick="refreshData()" class="p-2 text-slate-500 hover:text-hospital-500 rounded-lg hover:bg-slate-100 transition" title="Muat Semula Data"><i class="fa-solid fa-arrows-rotate"></i></button>
+          <div class="text-right hidden sm:block">
+            <p id="navUserName" class="text-sm font-semibold text-slate-800">Nama</p>
+            <p id="navUserRole" class="text-xs text-slate-500">Peranan</p>
+          </div>
+        </div>
+      </header>
+
+      <main class="flex-1 p-6 overflow-y-auto custom-scrollbar">
+        <!-- DASHBOARD VIEW -->
+        <section id="view-dashboard" class="tab-view space-y-6">
+          <div class="bg-gradient-to-r from-navy-900 via-hospital-900 to-hospital-800 rounded-3xl p-6 text-white shadow-xl flex justify-between items-center">
+            <div>
+              <h2 class="text-2xl font-bold" id="welcomeUser">Selamat Datang</h2>
+              <p class="text-slate-300 text-sm mt-1">Sistem Rekod Perbelanjaan & Penggunaan Kad Touch 'n Go Hospital Kemaman</p>
+            </div>
+            <div class="bg-white/10 px-4 py-2 rounded-2xl border border-white/10 text-right">
+              <span class="text-xs text-slate-300 block uppercase">Portal Rasmi TNG</span>
+              <a href="https://tngportal.touchngo.com.my/" target="_blank" class="text-xs font-bold text-sky-300 hover:underline"><i class="fa-solid fa-arrow-up-right-from-square mr-1"></i> Buka Portal TNG</a>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex items-center justify-between">
+              <div>
+                <p class="text-xs font-semibold text-slate-500 uppercase">Kad Sedia Digunakan</p>
+                <p class="text-2xl font-bold text-slate-800 mt-1" id="dashCardsAvailable">0</p>
+                <p class="text-[11px] text-emerald-600 font-medium">Dalam Simpanan Penyelia</p>
+              </div>
+              <div class="p-3 bg-emerald-100 text-emerald-600 rounded-2xl"><i class="fa-solid fa-box-archive text-xl"></i></div>
+            </div>
+            <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex items-center justify-between">
+              <div>
+                <p class="text-xs font-semibold text-slate-500 uppercase">Kad Sedang Digunakan</p>
+                <p class="text-2xl font-bold text-slate-800 mt-1" id="dashCardsInUse">0</p>
+                <p class="text-[11px] text-amber-600 font-medium">Dalam Perjalanan / Tugasan</p>
+              </div>
+              <div class="p-3 bg-amber-100 text-amber-600 rounded-2xl"><i class="fa-solid fa-truck-medical text-xl"></i></div>
+            </div>
+          </div>
+
+          <!-- SENARAI KAD BELUM DIPULANGKAN -->
+          <div class="bg-white rounded-3xl border border-amber-200 shadow-lg overflow-hidden">
+            <div class="bg-gradient-to-r from-amber-500 via-amber-600 to-amber-700 px-6 py-4 flex items-center justify-between text-white">
+              <div class="flex items-center gap-3">
+                <div class="w-9 h-9 rounded-xl bg-white/20 backdrop-blur-md flex items-center justify-center font-bold"><i class="fa-solid fa-clock-rotate-left text-lg"></i></div>
+                <div>
+                  <h3 class="font-bold text-sm uppercase tracking-wide">Senarai Kad Belum Dipulangkan</h3>
+                  <p class="text-xs text-amber-100">Kad yang sedang berada di luar bagi tugasan rasmi</p>
+                </div>
+              </div>
+              <span class="px-3 py-1 bg-white/20 backdrop-blur-md rounded-full text-xs font-bold text-white border border-white/20" id="badgePendingCount">0 Kad</span>
+            </div>
+
+            <div class="p-4 overflow-x-auto">
+              <table class="w-full text-left text-xs text-slate-700">
+                <thead class="bg-amber-50/60 uppercase font-bold text-amber-900 border-b border-amber-100">
+                  <tr>
+                    <th class="p-3">Kenderaan</th>
+                    <th class="p-3">ID Kad / No. Kad</th>
+                    <th class="p-3">Pemegang Semasa</th>
+                    <th class="p-3">Tarikh / Masa Diambil</th>
+                    <th class="p-3 text-center">Status</th>
+                  </tr>
+                </thead>
+                <tbody id="dashPendingCardsBody">
+                  <tr><td colspan="5" class="p-4 text-center text-slate-400">Semua kad berada dalam simpanan.</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="bg-slate-50 px-6 py-3 border-t flex items-center justify-between text-xs text-slate-500">
+              <span id="pendingPageInfo">Menunjukkan 0 daripada 0 rekod</span>
+              <div class="flex gap-2">
+                <button onclick="changePendingPage(-1)" id="btnPendingPrev" disabled class="px-3 py-1.5 rounded-lg bg-white border border-slate-200 font-semibold disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100">Sebelumnya</button>
+                <button onclick="changePendingPage(1)" id="btnPendingNext" disabled class="px-3 py-1.5 rounded-lg bg-white border border-slate-200 font-semibold disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100">Seterusnya</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- SENARAI KAD VIEW -->
+        <section id="view-cards" class="tab-view hidden space-y-4">
+          <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden p-4">
+            <table class="w-full text-left text-xs text-slate-600">
+              <thead class="bg-slate-50 uppercase font-semibold">
+                <tr>
+                  <th class="p-3">ID Kad</th>
+                  <th class="p-3">No. Kad</th>
+                  <th class="p-3">Kenderaan Padanan</th>
+                  <th class="p-3">Pemegang Semasa</th>
+                  <th class="p-3">Status Kad</th>
+                </tr>
+              </thead>
+              <tbody id="cardsTableBody"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- LAPORAN VIEW -->
+        <section id="view-analytics" class="tab-view hidden space-y-6">
+          <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <h3 class="text-base font-bold text-slate-800">Laporan Analisis Perbelanjaan Kad</h3>
+              <p class="text-xs text-slate-500">Saringan penggunaan Tol & Parkir mengikut bulan kewangan</p>
+            </div>
+            <div class="flex flex-wrap items-center gap-3">
+              <select id="filterMonth" onchange="renderAnalyticsCharts()" class="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 outline-none">
+                <option value="ALL">-- Semua Bulan --</option>
+                <option value="01">Januari</option>
+                <option value="02">Februari</option>
+                <option value="03">Mac</option>
+                <option value="04">April</option>
+                <option value="05">Mei</option>
+                <option value="06">Jun</option>
+                <option value="07">Julai</option>
+                <option value="08">Ogos</option>
+                <option value="09">September</option>
+                <option value="10">Oktober</option>
+                <option value="11">November</option>
+                <option value="12">Disember</option>
+              </select>
+
+              <select id="filterYear" onchange="renderAnalyticsCharts()" class="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 outline-none">
+                <option value="2026">2026</option>
+                <option value="2025">2025</option>
+              </select>
+
+              <button onclick="resetAnalyticsFilter()" class="px-4 py-2.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl text-xs font-semibold transition">
+                <i class="fa-solid fa-rotate-left mr-1"></i> Reset
+              </button>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
+              <p class="text-xs font-semibold text-slate-500 uppercase">Jumlah Perbelanjaan</p>
+              <p class="text-2xl font-bold text-hospital-900 mt-1" id="anaTotalCost">RM 0.00</p>
+              <span class="text-[11px] text-slate-400">Tol + Parkir Bulanan</span>
+            </div>
+            <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
+              <p class="text-xs font-semibold text-slate-500 uppercase">Jumlah Perjalanan</p>
+              <p class="text-2xl font-bold text-sky-600 mt-1" id="anaTotalTrips">0 Perjalanan</p>
+              <span class="text-[11px] text-sky-500">Keluar / Masuk Kad</span>
+            </div>
+            <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
+              <p class="text-xs font-semibold text-slate-500 uppercase">Jumlah Kos Tol</p>
+              <p class="text-2xl font-bold text-emerald-600 mt-1" id="anaTollCost">RM 0.00</p>
+              <span class="text-[11px] text-emerald-500">Penggunaan Lebuhraya</span>
+            </div>
+            <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
+              <p class="text-xs font-semibold text-slate-500 uppercase">Jumlah Kos Parkir</p>
+              <p class="text-2xl font-bold text-amber-600 mt-1" id="anaParkingCost">RM 0.00</p>
+              <span class="text-[11px] text-amber-500">Bayaran Parkir</span>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
+              <h4 class="text-xs font-bold text-slate-700 uppercase mb-4"><i class="fa-solid fa-truck-medical text-hospital-500 mr-2"></i>Kenderaan Paling Banyak Bergerak (Bil. Perjalanan)</h4>
+              <canvas id="chartTopVehicles"></canvas>
+            </div>
+
+            <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
+              <h4 class="text-xs font-bold text-slate-700 uppercase mb-4"><i class="fa-solid fa-chart-pie text-amber-500 mr-2"></i>Nisbah Perbelanjaan (Tol vs Parkir)</h4>
+              <div class="max-w-xs mx-auto"><canvas id="chartCostBreakdown"></canvas></div>
+            </div>
+          </div>
+
+          <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm space-y-3">
+            <h4 class="text-xs font-bold text-slate-700 uppercase border-b pb-2"><i class="fa-solid fa-users text-purple-500 mr-2"></i>Statistik Penggunaan Kad Mengikut Pemandu</h4>
+            <div class="overflow-x-auto max-h-48 custom-scrollbar">
+              <table class="w-full text-left text-xs">
+                <thead class="bg-slate-50 text-slate-500 font-semibold">
+                  <tr><th class="p-2">Nama Pemandu</th><th class="p-2">ID Pemandu</th><th class="p-2 text-center">Jumlah Perjalanan</th></tr>
+                </thead>
+                <tbody id="anaDriverTableBody">
+                  <tr><td colspan="3" class="p-3 text-center text-slate-400">Tiada rekod pemandu</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- AMBIL KAD -->
+        <section id="view-issueCard" class="tab-view hidden max-w-2xl mx-auto">
+          <div class="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-4">
+            <h3 class="text-base font-bold text-slate-800 border-b pb-3">Borang Pengambilan Kad</h3>
+            <form id="issueCardForm" onsubmit="handleIssueCardSubmit(event)" class="space-y-4">
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">1. Pilih Kenderaan</label>
+                <select id="issueVehicleSelect" required onchange="autoMatchCardByVehicle()" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-800">
+                  <option value="">-- Pilih No. Pendaftaran Kenderaan --</option>
+                </select>
+              </div>
+
+              <div class="bg-sky-50 p-4 rounded-xl border border-sky-100">
+                <label class="block text-xs font-semibold text-hospital-800 mb-1">Kad TNG Padanan Auto</label>
+                <input type="text" id="issueCardDisplay" readonly placeholder="Pilih kenderaan di atas" class="w-full p-2.5 bg-white border border-sky-200 rounded-xl text-sm font-bold text-hospital-900">
+                <input type="hidden" id="issueCardId">
+                <input type="hidden" id="issueVehicleReg">
+                <input type="hidden" id="issueVehicleId">
+              </div>
+
+              <div id="cardStatusWarning" class="hidden p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold"></div>
+
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">2. Pilih Penyelia Penyerah Kad</label>
+                <select id="issueSupervisorId" required class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-800">
+                  <option value="">-- Pilih Nama Penyelia --</option>
+                </select>
+              </div>
+
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">3. Pilih Pemandu Penerima Kad</label>
+                <select id="issueUserId" required class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm">
+                  <option value="">-- Pilih Pemandu --</option>
+                </select>
+              </div>
+
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">4. Tujuan / Destinasi Tugasan</label>
+                <input type="text" id="issuePurpose" required placeholder="Contoh: Tugasan Rasmi ke HSB" class="w-full p-2.5 bg-slate-50 border rounded-xl text-sm">
+              </div>
+
+              <button type="submit" id="btnSubmitIssue" disabled class="w-full py-3 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white rounded-xl font-semibold text-sm transition">Serahkan Kad</button>
+            </form>
+          </div>
+        </section>
+
+        <!-- PULANGKAN KAD -->
+        <section id="view-returnCard" class="tab-view hidden max-w-2xl mx-auto">
+          <div class="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-4">
+            <h3 class="text-base font-bold text-slate-800 border-b pb-3">Borang Pemulangan Kad</h3>
+            <form id="returnCardForm" onsubmit="handleReturnCardSubmit(event)" class="space-y-4">
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Pilih Kad Untuk Dipulangkan</label>
+                <select id="returnCardId" required onchange="updateReturnFormDetails()" class="w-full p-2.5 bg-slate-50 border rounded-xl text-sm"></select>
+              </div>
+              
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Pemegang Semasa</label>
+                <input type="text" id="returnHolderName" readonly class="w-full p-2.5 bg-slate-100 border rounded-xl text-sm text-slate-500 font-semibold">
+              </div>
+
+              <div class="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+                <h4 class="text-xs font-bold text-slate-700 uppercase">Rekod Amaun Penggunaan Kad</h4>
+                <div class="grid grid-cols-2 gap-4">
+                  <div>
+                    <label class="block text-xs font-bold text-slate-700 uppercase mb-1">TOL (RM)</label>
+                    <input type="number" step="0.01" min="0" id="returnTollAmount" value="0.00" class="w-full p-2.5 bg-white border border-slate-300 rounded-xl text-sm font-bold text-slate-800 focus:ring-2 focus:ring-hospital-500 outline-none">
+                  </div>
+                  <div>
+                    <label class="block text-xs font-bold text-slate-700 uppercase mb-1">PARKIR (RM)</label>
+                    <input type="number" step="0.01" min="0" id="returnParkingAmount" value="0.00" class="w-full p-2.5 bg-white border border-slate-300 rounded-xl text-sm font-bold text-slate-800 focus:ring-2 focus:ring-hospital-500 outline-none">
+                  </div>
+                </div>
+              </div>
+
+              <button type="submit" id="btnSubmitReturn" class="w-full py-3 bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-semibold text-sm transition">Pulangkan Kad & Rekodkan Penggunaan</button>
+            </form>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <!-- LOGIK JAVASCRIPT -->
+  <script>
+    let currentUser = null;
+    let dbData = { cards: [], vehicles: [], users: [], holders: [], issues: [] };
+    let chartPieInstance = null, chartVehicleInstance = null;
+
+    let pendingCurrentPage = 1;
+    const pendingPageSize = 10;
+    let pendingCardsList = [];
+
+    function callApi(action, payload = {}) {
+      showLoading();
+      return new Promise((resolve, reject) => {
+        const callbackName = 'jsonp_cb_' + Math.round(100000 * Math.random());
+        window[callbackName] = function(data) {
+          delete window[callbackName];
+          if (document.body.contains(script)) document.body.removeChild(script);
+          hideLoading();
+          if (data && data.success !== undefined) resolve(data);
+          else reject(data);
+        };
+
+        const script = document.createElement('script');
+        let src = `${API_URL}?action=${encodeURIComponent(action)}&callback=${callbackName}`;
+        if (payload) src += `&payload=${encodeURIComponent(JSON.stringify(payload))}`;
+        
+        script.src = src;
+        script.onerror = function() {
+          delete window[callbackName];
+          if (document.body.contains(script)) document.body.removeChild(script);
+          hideLoading();
+          showError("Ralat API_URL / Rangkaian.");
+          reject(new Error("Network Error"));
+        };
+        document.body.appendChild(script);
+      });
+    }
+
+    async function handleLoginSubmit(e) {
+      e.preventDefault();
+      const userId = document.getElementById('loginUserId').value.trim();
+      const pin = document.getElementById('loginPin').value.trim();
+
+      try {
+        const res = await callApi('login', { userId, pin });
+        if (res.success) {
+          currentUser = res.data;
+          document.getElementById('loginScreen').classList.add('hidden');
+          document.getElementById('appContainer').classList.remove('hidden');
+          setupUserInterface();
+          refreshData();
+          showSuccess("Selamat Datang, " + currentUser.NAMA_PENGGUNA);
+        } else {
+          showError(res.message);
+        }
+      } catch (err) {
+        showError("Ralat log masuk.");
+      }
+    }
+
+    function setupUserInterface() {
+      document.getElementById('navUserName').innerText = currentUser.NAMA_PENGGUNA;
+      document.getElementById('navUserRole').innerText = currentUser.PERANAN;
+      document.getElementById('welcomeUser').innerText = "Selamat Datang, " + currentUser.NAMA_PENGGUNA;
+    }
+
+    function handleLogout() {
+      currentUser = null;
+      document.getElementById('appContainer').classList.add('hidden');
+      document.getElementById('loginScreen').classList.remove('hidden');
+    }
+
+    async function refreshData() {
+      try {
+        const res = await callApi('getInitialData', {});
+        if (res.success) {
+          dbData = res.data;
+          renderDashboard();
+          renderCardsTable();
+          populateDropdowns();
+          renderAnalyticsCharts();
+        }
+      } catch (e) {
+        showError("Gagal memuatkan data.");
+      }
+    }
+
+    function renderDashboard() {
+      let availCount = 0, usedCount = 0;
+      pendingCardsList = [];
+
+      (dbData.cards || []).forEach(c => {
+        const status = String(c.STATUS_KAD).toUpperCase();
+        if (status === 'DALAM SIMPANAN') availCount++;
+        if (status === 'SEDANG DIGUNAKAN') {
+          usedCount++;
+          pendingCardsList.push(c);
+        }
+      });
+
+      document.getElementById('dashCardsAvailable').innerText = availCount;
+      document.getElementById('dashCardsInUse').innerText = usedCount;
+      document.getElementById('badgePendingCount').innerText = usedCount + " Kad";
+
+      pendingCurrentPage = 1;
+      renderPendingCardsPage();
+    }
+
+    function renderPendingCardsPage() {
+      const tbody = document.getElementById('dashPendingCardsBody');
+      tbody.innerHTML = '';
+
+      const total = pendingCardsList.length;
+      if (total === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="p-4 text-center text-slate-400 font-semibold">Semua kad berada dalam simpanan. Tiada kad belum dipulangkan.</td></tr>';
+        document.getElementById('pendingPageInfo').innerText = "Menunjukkan 0 daripada 0 rekod";
+        document.getElementById('btnPendingPrev').disabled = true;
+        document.getElementById('btnPendingNext').disabled = true;
+        return;
+      }
+
+      const totalPages = Math.ceil(total / pendingPageSize);
+      if (pendingCurrentPage > totalPages) pendingCurrentPage = totalPages;
+      if (pendingCurrentPage < 1) pendingCurrentPage = 1;
+
+      const start = (pendingCurrentPage - 1) * pendingPageSize;
+      const end = Math.min(start + pendingPageSize, total);
+      const currentItems = pendingCardsList.slice(start, end);
+
+      currentItems.forEach(c => {
+        const v = (dbData.vehicles || []).find(veh => String(veh.ID_KENDERAAN) === String(c.ID_KENDERAAN));
+        const regNo = v ? v.NO_PENDAFTARAN : (c.NO_PENDAFTARAN || '-');
+        
+        const lastIssue = (dbData.issues || []).find(iss => String(iss.ID_KAD) === String(c.ID_KENDERAAN || c.ID_KAD) && String(iss.JENIS_TRANSAKSI).toUpperCase() === 'PENGELUARAN');
+        const issueTime = lastIssue ? lastIssue.TIMESTAMP : '-';
+
+        tbody.innerHTML += `
+          <tr class="border-b border-slate-100 hover:bg-amber-50/30 transition">
+            <td class="p-3 font-bold text-slate-800"><i class="fa-solid fa-car text-amber-500 mr-2"></i>${regNo}</td>
+            <td class="p-3 font-mono text-slate-600">${c.ID_KAD} (${c.NO_KAD_DISPLAY || c.NO_KAD})</td>
+            <td class="p-3 font-semibold text-slate-700">${c.PEMEGANG_SEMASA || '-'}</td>
+            <td class="p-3 text-slate-500">${issueTime}</td>
+            <td class="p-3 text-center">
+              <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-300 animate-pulse">
+                <span class="w-2 h-2 rounded-full bg-amber-500"></span> Belum Dipulangkan
+              </span>
+            </td>
+          </tr>
+        `;
+      });
+
+      document.getElementById('pendingPageInfo').innerText = `Menunjukkan ${start + 1} hingga ${end} daripada ${total} rekod (Halaman ${pendingCurrentPage}/${totalPages})`;
+      document.getElementById('btnPendingPrev').disabled = (pendingCurrentPage === 1);
+      document.getElementById('btnPendingNext').disabled = (pendingCurrentPage === totalPages);
+    }
+
+    function changePendingPage(dir) {
+      pendingCurrentPage += dir;
+      renderPendingCardsPage();
+    }
+
+    function renderCardsTable() {
+      const tbody = document.getElementById('cardsTableBody');
+      if (!tbody) return;
+      tbody.innerHTML = '';
+      dbData.cards.forEach(c => {
+        const v = (dbData.vehicles || []).find(veh => String(veh.ID_KENDERAAN) === String(c.ID_KENDERAAN));
+        const regNo = v ? v.NO_PENDAFTARAN : (c.NO_PENDAFTARAN || '-');
+
+        tbody.innerHTML += `
+          <tr class="border-b">
+            <td class="p-3 font-bold">${c.ID_KAD}</td>
+            <td class="p-3 font-mono">${c.NO_KAD_DISPLAY || c.NO_KAD}</td>
+            <td class="p-3 font-semibold">${regNo}</td>
+            <td class="p-3">${c.PEMEGANG_SEMASA || '-'}</td>
+            <td class="p-3">${c.STATUS_KAD}</td>
+          </tr>
+        `;
+      });
+    }
+
+    function renderAnalyticsCharts() {
+      const selectedMonth = document.getElementById('filterMonth').value;
+      const selectedYear = document.getElementById('filterYear').value;
+
+      let totalToll = 0, totalPark = 0, totalTrips = 0;
+      const vehicleTripCounts = {};
+      const driverTripCounts = {};
+
+      (dbData.issues || []).forEach(iss => {
+        if (!iss.TIMESTAMP) return;
+        const parts = String(iss.TIMESTAMP).split('/');
+        if (parts.length >= 3) {
+          const m = parts[1].padStart(2, '0');
+          const y = parts[2].split(',')[0].trim();
+
+          if ((selectedMonth === 'ALL' || m === selectedMonth) && y === selectedYear) {
+            totalTrips++;
+
+            const driverName = iss.NAMA_PENGGUNA || 'Pemandu Tidak Dinyatakan';
+            driverTripCounts[driverName] = (driverTripCounts[driverName] || 0) + 1;
+
+            const txt = String(iss.TUJUAN || "");
+            const vehMatch = txt.match(/\[(.*?)\]/);
+            
+            if (vehMatch && vehMatch[1] && vehMatch[1].trim() !== '-' && vehMatch[1].trim() !== '') {
+              const regNo = vehMatch[1].trim();
+              vehicleTripCounts[regNo] = (vehicleTripCounts[regNo] || 0) + 1;
+            }
+
+            const tollMatch = txt.match(/Tol:\s*RM\s*([\d\.]+)/i);
+            const parkMatch = txt.match(/Parkir:\s*RM\s*([\d\.]+)/i);
+
+            if (tollMatch) totalToll += parseFloat(tollMatch[1]) || 0;
+            if (parkMatch) totalPark += parseFloat(parkMatch[1]) || 0;
+          }
+        }
+      });
+
+      const grandTotal = totalToll + totalPark;
+      document.getElementById('anaTotalCost').innerText = "RM " + grandTotal.toFixed(2);
+      document.getElementById('anaTotalTrips').innerText = totalTrips + " Perjalanan";
+      document.getElementById('anaTollCost').innerText = "RM " + totalToll.toFixed(2);
+      document.getElementById('anaParkingCost').innerText = "RM " + totalPark.toFixed(2);
+
+      const vehLabels = Object.keys(vehicleTripCounts);
+      const vehData = Object.values(vehicleTripCounts);
+
+      const ctxVeh = document.getElementById('chartTopVehicles').getContext('2d');
+      if (chartVehicleInstance) chartVehicleInstance.destroy();
+      chartVehicleInstance = new Chart(ctxVeh, {
+        type: 'bar',
+        data: {
+          labels: vehLabels.length ? vehLabels : ['Tiada Pergerakan Kenderaan'],
+          datasets: [{
+            label: 'Kekerapan Perjalanan',
+            data: vehData.length ? vehData : [0],
+            backgroundColor: '#0284c7',
+            borderRadius: 6
+          }]
+        },
+        options: { 
+          responsive: true, 
+          plugins: { legend: { display: false } },
+          scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } }
+        }
+      });
+
+      const ctxPie = document.getElementById('chartCostBreakdown').getContext('2d');
+      if (chartPieInstance) chartPieInstance.destroy();
+      chartPieInstance = new Chart(ctxPie, {
+        type: 'doughnut',
+        data: {
+          labels: ['Tol (RM)', 'Parkir (RM)'],
+          datasets: [{
+            data: [totalToll, totalPark],
+            backgroundColor: ['#10b981', '#f59e0b']
+          }]
+        },
+        options: { responsive: true, plugins: { legend: { position: 'bottom' } } }
+      });
+
+      const driverBody = document.getElementById('anaDriverTableBody');
+      driverBody.innerHTML = '';
+      const driverKeys = Object.keys(driverTripCounts);
+
+      if (driverKeys.length === 0) {
+        driverBody.innerHTML = '<tr><td colspan="3" class="p-3 text-center text-slate-400">Tiada pergerakan direkodkan untuk tempoh ini</td></tr>';
+      } else {
+        driverKeys.forEach(drv => {
+          const userObj = (dbData.users || []).find(u => u.NAMA_PENGGUNA === drv);
+          driverBody.innerHTML += `
+            <tr class="border-b border-slate-100">
+              <td class="p-2 font-bold text-slate-700">${drv}</td>
+              <td class="p-2 text-slate-500">${userObj ? userObj.ID_PENGGUNA : '-'}</td>
+              <td class="p-2 text-center font-bold text-hospital-800">${driverTripCounts[drv]} kali</td>
+            </tr>
+          `;
+        });
+      }
+    }
+
+    function resetAnalyticsFilter() {
+      document.getElementById('filterMonth').value = 'ALL';
+      document.getElementById('filterYear').value = '2026';
+      renderAnalyticsCharts();
+    }
+
+    function populateDropdowns() {
+      const vehicleSelect = document.getElementById('issueVehicleSelect');
+      if (vehicleSelect) {
+        vehicleSelect.innerHTML = '<option value="">-- Pilih No. Pendaftaran Kenderaan --</option>';
+        (dbData.vehicles || []).forEach(v => {
+          const regNo = v.NO_PENDAFTARAN || 'Tanpa No Plat';
+          const vName = v.NAMA_KENDERAAN || '';
+          vehicleSelect.innerHTML += `<option value="${v.ID_KENDERAAN}">${regNo} ${vName ? ' - ' + vName : ''}</option>`;
+        });
+      }
+
+      const supervisorSelect = document.getElementById('issueSupervisorId');
+      if (supervisorSelect) {
+        supervisorSelect.innerHTML = '<option value="">-- Pilih Nama Penyelia --</option>';
+        const supervisors = (dbData.users || []).filter(u => 
+          String(u.STATUS).toUpperCase() === 'AKTIF' && 
+          (String(u.JAWATAN).toUpperCase().includes('PENYELIA') || String(u.PERANAN).toUpperCase() === 'ADMIN')
+        );
+        supervisors.forEach(s => {
+          supervisorSelect.innerHTML += `<option value="${s.ID_PENGGUNA}">${s.NAMA_PENGGUNA} (${s.JAWATAN})</option>`;
+        });
+      }
+
+      const userSelect = document.getElementById('issueUserId');
+      if (userSelect) {
+        userSelect.innerHTML = '<option value="">-- Pilih Pemandu --</option>';
+        (dbData.users || []).filter(u => String(u.STATUS).toUpperCase() === 'AKTIF').forEach(u => {
+          userSelect.innerHTML += `<option value="${u.ID_PENGGUNA}">${u.NAMA_PENGGUNA} (${u.ID_PENGGUNA})</option>`;
+        });
+        
+        if (currentUser && currentUser.PERANAN !== 'ADMIN') {
+          userSelect.value = currentUser.ID_PENGGUNA;
+        }
+      }
+
+      const returnSelect = document.getElementById('returnCardId');
+      if (returnSelect) {
+        returnSelect.innerHTML = '<option value="">-- Pilih Kad Untuk Dipulangkan --</option>';
+        dbData.cards.filter(c => String(c.STATUS_KAD).toUpperCase() === 'SEDANG DIGUNAKAN').forEach(c => {
+          returnSelect.innerHTML += `<option value="${c.ID_KAD}">${c.ID_KAD} - Pemegang: ${c.PEMEGANG_SEMASA || ''}</option>`;
+        });
+      }
+    }
+
+    function autoMatchCardByVehicle() {
+      const selectedVehicleId = document.getElementById('issueVehicleSelect').value;
+      const vehicle = dbData.vehicles.find(v => String(v.ID_KENDERAAN) === String(selectedVehicleId));
+      const card = dbData.cards.find(c => String(c.ID_KENDERAAN) === String(selectedVehicleId));
+      
+      const submitBtn = document.getElementById('btnSubmitIssue');
+      const warningDiv = document.getElementById('cardStatusWarning');
+
+      if (vehicle && card) {
+        const regNo = vehicle.NO_PENDAFTARAN || '-';
+
+        document.getElementById('issueCardId').value = card.ID_KAD;
+        document.getElementById('issueCardDisplay').value = `${card.NO_KAD_DISPLAY || card.NO_KAD} (${card.ID_KAD})`;
+        document.getElementById('issueVehicleReg').value = regNo;
+        document.getElementById('issueVehicleId').value = vehicle.ID_KENDERAAN;
+
+        const status = String(card.STATUS_KAD).toUpperCase();
+        if (status === 'DALAM SIMPANAN') {
+          warningDiv.classList.add('hidden');
+          submitBtn.disabled = false;
+        } else {
+          warningDiv.innerText = `Amaran: Kad TNG bagi kenderaan ${regNo} sedang berstatus '${status}'. Hanya kad 'DALAM SIMPANAN' boleh dikeluarkan.`;
+          warningDiv.classList.remove('hidden');
+          submitBtn.disabled = true;
+        }
+      } else if (vehicle && !card) {
+        document.getElementById('issueCardId').value = '';
+        document.getElementById('issueCardDisplay').value = 'Tiada Kad TNG Ditetapkan';
+        document.getElementById('issueVehicleReg').value = vehicle.NO_PENDAFTARAN;
+        document.getElementById('issueVehicleId').value = vehicle.ID_KENDERAAN;
+
+        warningDiv.innerText = `Amaran: Kenderaan ${vehicle.NO_PENDAFTARAN} belum dipadankan dengan mana-mana Kad Touch 'n Go.`;
+        warningDiv.classList.remove('hidden');
+        submitBtn.disabled = true;
+      } else {
+        document.getElementById('issueCardId').value = '';
+        document.getElementById('issueCardDisplay').value = '';
+        document.getElementById('issueVehicleReg').value = '';
+        document.getElementById('issueVehicleId').value = '';
+        warningDiv.classList.add('hidden');
+        submitBtn.disabled = true;
+      }
+    }
+
+    function updateReturnFormDetails() {
+      const id = document.getElementById('returnCardId').value;
+      const card = dbData.cards.find(c => String(c.ID_KAD) === String(id));
+      const submitBtn = document.getElementById('btnSubmitReturn');
+
+      if (card) {
+        document.getElementById('returnHolderName').value = card.PEMEGANG_SEMASA || '-';
+        document.getElementById('returnTollAmount').value = "0.00";
+        document.getElementById('returnParkingAmount').value = "0.00";
+
+        const isCurrentHolder = currentUser && (
+          String(currentUser.NAMA_PENGGUNA).trim().toUpperCase() === String(card.PEMEGANG_SEMASA).trim().toUpperCase() || 
+          String(currentUser.PERANAN).toUpperCase() === 'ADMIN'
+        );
+
+        if (!isCurrentHolder && card.PEMEGANG_SEMASA) {
+          showError("Hanya " + card.PEMEGANG_SEMASA + " sahaja dibenarkan memulangkan kad ini.");
+          submitBtn.disabled = true;
+          submitBtn.classList.add('opacity-50', 'cursor-not-allowed');
+        } else {
+          submitBtn.disabled = false;
+          submitBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+        }
+      }
+    }
+
+    async function handleIssueCardSubmit(e) {
+      e.preventDefault();
+      const cardId = document.getElementById('issueCardId').value;
+      const supervisorId = document.getElementById('issueSupervisorId').value;
+      const driverId = document.getElementById('issueUserId').value;
+      
+      const supervisor = dbData.users.find(u => String(u.ID_PENGGUNA) === String(supervisorId));
+      const driver = dbData.users.find(u => String(u.ID_PENGGUNA) === String(driverId));
+
+      const payload = {
+        idKad: cardId,
+        idPengguna: driverId,
+        namaPengguna: driver ? driver.NAMA_PENGGUNA : currentUser.NAMA_PENGGUNA,
+        noPendaftaran: document.getElementById('issueVehicleReg').value,
+        tujuan: document.getElementById('issuePurpose').value,
+        idPegawaiPenyerah: supervisorId,
+        namaPegawaiPenyerah: supervisor ? supervisor.NAMA_PENGGUNA : currentUser.NAMA_PENGGUNA
+      };
+
+      const res = await callApi('issueCard', payload);
+      if (res.success) { showSuccess(res.message); refreshData(); switchTab('dashboard'); }
+      else showError(res.message);
+    }
+
+    async function handleReturnCardSubmit(e) {
+      e.preventDefault();
+      const cardId = document.getElementById('returnCardId').value;
+      const tollAmt = document.getElementById('returnTollAmount').value || '0.00';
+      const parkAmt = document.getElementById('returnParkingAmount').value || '0.00';
+
+      const payload = {
+        idKad: cardId,
+        idPegawaiPenerima: currentUser.ID_PENGGUNA,
+        namaPegawaiPenerima: currentUser.NAMA_PENGGUNA,
+        tollAmount: tollAmt,
+        parkingAmount: parkAmt,
+        peranan: currentUser.PERANAN
+      };
+
+      const res = await callApi('returnCard', payload);
+      if (res.success) { showSuccess(res.message); refreshData(); switchTab('dashboard'); }
+      else showError(res.message);
+    }
+
+    function switchTab(tabId) {
+      document.querySelectorAll('.tab-view').forEach(v => v.classList.add('hidden'));
+      const selectedView = document.getElementById('view-' + tabId);
+      if (selectedView) selectedView.classList.remove('hidden');
+
+      if (tabId === 'analytics') {
+        renderAnalyticsCharts();
+      }
+    }
+
+    function toggleMobileSidebar() { document.getElementById('sidebar').classList.toggle('hidden'); }
+    function showLoading() { document.getElementById('loadingOverlay').classList.remove('hidden'); }
+    function hideLoading() { document.getElementById('loadingOverlay').classList.add('hidden'); }
+
+    function showToast(msg, type = 'info') {
+      const container = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+      toast.className = `px-4 py-3 rounded-xl shadow-lg text-sm font-medium ${type === 'success' ? 'bg-emerald-600 text-white' : 'bg-rose-600 text-white'}`;
+      toast.innerHTML = `<span>${escapeHtml(msg)}</span>`;
+      container.appendChild(toast);
+      setTimeout(() => { toast.remove(); }, 3500);
+    }
+
+    function showSuccess(msg) { showToast(msg, 'success'); }
+    function showError(msg) { showToast(msg, 'error'); }
+
+    function escapeHtml(text) {
+      if (!text) return '';
+      return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+    }
+  </script>
+</body>
+</html>
