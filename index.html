@@ -163,6 +163,47 @@
               </div>
             </div>
           </div>
+
+          <!-- BAHARU: SENARAI REKOD PENGGUNAAN KAD TERKINI (PAGINATION 10/PAGE) -->
+          <div class="bg-white rounded-3xl border border-sky-200 shadow-lg overflow-hidden">
+            <div class="bg-gradient-to-r from-hospital-800 via-hospital-900 to-navy-900 px-6 py-4 flex items-center justify-between text-white">
+              <div class="flex items-center gap-3">
+                <div class="w-9 h-9 rounded-xl bg-white/20 backdrop-blur-md flex items-center justify-center font-bold"><i class="fa-solid fa-receipt text-lg"></i></div>
+                <div>
+                  <h3 class="font-bold text-sm uppercase tracking-wide">Rekod Penggunaan Kad & Perbelanjaan</h3>
+                  <p class="text-xs text-sky-200">Sejarah penggunaan tol, parkir, pemandu dan tujuan tugasan</p>
+                </div>
+              </div>
+              <span class="px-3 py-1 bg-white/20 backdrop-blur-md rounded-full text-xs font-bold text-white border border-white/20" id="badgeUsageCount">0 Rekod</span>
+            </div>
+
+            <div class="p-4 overflow-x-auto">
+              <table class="w-full text-left text-xs text-slate-700">
+                <thead class="bg-sky-50/60 uppercase font-bold text-hospital-900 border-b border-sky-100">
+                  <tr>
+                    <th class="p-3">Tarikh & Masa</th>
+                    <th class="p-3">Pemandu</th>
+                    <th class="p-3">Kenderaan / ID Kad</th>
+                    <th class="p-3">Tujuan Tugasan</th>
+                    <th class="p-3 text-right">Tol (RM)</th>
+                    <th class="p-3 text-right">Parkir (RM)</th>
+                    <th class="p-3 text-right">Jumlah Guna (RM)</th>
+                  </tr>
+                </thead>
+                <tbody id="dashUsageCardsBody">
+                  <tr><td colspan="7" class="p-4 text-center text-slate-400">Tiada rekod penggunaan ditemui.</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="bg-slate-50 px-6 py-3 border-t flex items-center justify-between text-xs text-slate-500">
+              <span id="usagePageInfo">Menunjukkan 0 daripada 0 rekod</span>
+              <div class="flex gap-2">
+                <button onclick="changeUsagePage(-1)" id="btnUsagePrev" disabled class="px-3 py-1.5 rounded-lg bg-white border border-slate-200 font-semibold disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100">Sebelumnya</button>
+                <button onclick="changeUsagePage(1)" id="btnUsageNext" disabled class="px-3 py-1.5 rounded-lg bg-white border border-slate-200 font-semibold disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100">Seterusnya</button>
+              </div>
+            </div>
+          </div>
         </section>
 
         <!-- SENARAI KAD VIEW -->
@@ -357,9 +398,15 @@
     let dbData = { cards: [], vehicles: [], users: [], holders: [], issues: [] };
     let chartPieInstance = null, chartVehicleInstance = null;
 
+    // VARIABEL PAGINATION KAD BELUM DIPULANGKAN
     let pendingCurrentPage = 1;
     const pendingPageSize = 10;
     let pendingCardsList = [];
+
+    // VARIABEL PAGINATION REKOD PENGGUNAAN KAD (MAKSIMUM 10 REKOD PER PAGE)
+    let usageCurrentPage = 1;
+    const usagePageSize = 10;
+    let usageCardsList = [];
 
     function callApi(action, payload = {}) {
       showLoading();
@@ -457,6 +504,11 @@
 
       pendingCurrentPage = 1;
       renderPendingCardsPage();
+
+      // RENDERING REKOD PENGGUNAAN KAD
+      prepareUsageCardsList();
+      usageCurrentPage = 1;
+      renderUsageCardsPage();
     }
 
     function renderPendingCardsPage() {
@@ -510,6 +562,89 @@
     function changePendingPage(dir) {
       pendingCurrentPage += dir;
       renderPendingCardsPage();
+    }
+
+    // FUNGSI PENYEDIAAN LIST PENGGUNAAN KAD (HANYA AMBIL TRANSAKSI PEMULANGAN / PENGGUNAAN)
+    function prepareUsageCardsList() {
+      usageCardsList = [];
+      (dbData.issues || []).forEach(iss => {
+        if (String(iss.JENIS_TRANSAKSI).toUpperCase() === 'PEMULANGAN') {
+          const driverName = iss.NAMA_PENGGUNA || 'Pemandu Tidak Dinyatakan';
+          const txt = String(iss.TUJUAN || "");
+          
+          let regNo = '-';
+          const vehMatch = txt.match(/\[(.*?)\]/);
+          if (vehMatch && vehMatch[1]) regNo = vehMatch[1].trim();
+
+          let tollAmt = 0.00, parkAmt = 0.00;
+          const tollMatch = txt.match(/Tol:\s*RM\s*([\d\.]+)/i);
+          const parkMatch = txt.match(/Parkir:\s*RM\s*([\d\.]+)/i);
+
+          if (tollMatch) tollAmt = parseFloat(tollMatch[1]) || 0;
+          if (parkMatch) parkAmt = parseFloat(parkMatch[1]) || 0;
+
+          const totalUsage = tollAmt + parkAmt;
+
+          usageCardsList.push({
+            timestamp: iss.TIMESTAMP || '-',
+            driver: driverName,
+            vehicleReg: regNo,
+            cardId: iss.ID_KAD || '-',
+            purpose: txt.replace(/\(Tol:.*?\)/, '').trim(),
+            toll: tollAmt,
+            parking: parkAmt,
+            total: totalUsage
+          });
+        }
+      });
+
+      document.getElementById('badgeUsageCount').innerText = usageCardsList.length + " Rekod";
+    }
+
+    // FUNGSI RENDERING PAGINATION REKOD PENGGUNAAN KAD (MAKSIMUM 10 REKOD)
+    function renderUsageCardsPage() {
+      const tbody = document.getElementById('dashUsageCardsBody');
+      tbody.innerHTML = '';
+
+      const total = usageCardsList.length;
+      if (total === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="p-4 text-center text-slate-400 font-semibold">Tiada rekod penggunaan kad ditemui.</td></tr>';
+        document.getElementById('usagePageInfo').innerText = "Menunjukkan 0 daripada 0 rekod";
+        document.getElementById('btnUsagePrev').disabled = true;
+        document.getElementById('btnUsageNext').disabled = true;
+        return;
+      }
+
+      const totalPages = Math.ceil(total / usagePageSize);
+      if (usageCurrentPage > totalPages) usageCurrentPage = totalPages;
+      if (usageCurrentPage < 1) usageCurrentPage = 1;
+
+      const start = (usageCurrentPage - 1) * usagePageSize;
+      const end = Math.min(start + usagePageSize, total);
+      const currentItems = usageCardsList.slice(start, end);
+
+      currentItems.forEach(u => {
+        tbody.innerHTML += `
+          <tr class="border-b border-slate-100 hover:bg-sky-50/30 transition">
+            <td class="p-3 text-slate-500 font-medium">${u.timestamp}</td>
+            <td class="p-3 font-bold text-slate-800"><i class="fa-solid fa-user-gear text-hospital-500 mr-2"></i>${u.driver}</td>
+            <td class="p-3 font-semibold text-slate-700">${u.vehicleReg} <span class="text-slate-400 text-[10px]">(${u.cardId})</span></td>
+            <td class="p-3 text-slate-600 max-w-xs truncate">${u.purpose}</td>
+            <td class="p-3 text-right font-semibold text-emerald-600">RM ${u.toll.toFixed(2)}</td>
+            <td class="p-3 text-right font-semibold text-amber-600">RM ${u.parking.toFixed(2)}</td>
+            <td class="p-3 text-right font-bold text-hospital-900">RM ${u.total.toFixed(2)}</td>
+          </tr>
+        `;
+      });
+
+      document.getElementById('usagePageInfo').innerText = `Menunjukkan ${start + 1} hingga ${end} daripada ${total} rekod (Halaman ${usageCurrentPage}/${totalPages})`;
+      document.getElementById('btnUsagePrev').disabled = (usageCurrentPage === 1);
+      document.getElementById('btnUsageNext').disabled = (usageCurrentPage === totalPages);
+    }
+
+    function changeUsagePage(dir) {
+      usageCurrentPage += dir;
+      renderUsageCardsPage();
     }
 
     function renderCardsTable() {
