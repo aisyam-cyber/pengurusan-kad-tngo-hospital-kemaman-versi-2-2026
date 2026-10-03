@@ -17,7 +17,7 @@
 
   <script>
     // ⚠️ GANTIKAN DENGAN WEB APP URL GOOGLE APPS SCRIPT SEBENAR ANDA
-    const API_URL = "https://script.google.com/a/macros/moh.gov.my/s/AKfycbwUZuet6YIBn19w3RGgwavl8Z4k6KtAQGSXxTnMF8WHh4pOL9Ntly0PfrPcIvtXOuU/exec";
+    const API_URL = "https://script.google.com/a/macros/moh.gov.my/s/AKfycbwc_UpvhmgX-UX6_DsGG8vSrCXHhSH5aJ5x00TvZ1n7zhjHWDDdaUv9Q1nNhIxwhu3N/exec";
   </script>
 
   <!-- OVERLAY LOADING & NOTIFIKASI -->
@@ -573,8 +573,17 @@
           const txt = String(iss.TUJUAN || "");
           
           let regNo = '-';
-          const vehMatch = txt.match(/\[(.*?)\]/);
-          if (vehMatch && vehMatch[1]) regNo = vehMatch[1].trim();
+          const cardObj = (dbData.cards || []).find(c => String(c.ID_KAD) === String(iss.ID_KAD));
+          if (cardObj) {
+            const vehObj = (dbData.vehicles || []).find(v => String(v.ID_KENDERAAN) === String(cardObj.ID_KENDERAAN));
+            if (vehObj) regNo = vehObj.NO_PENDAFTARAN;
+            else if (cardObj.NO_PENDAFTARAN) regNo = cardObj.NO_PENDAFTARAN;
+          }
+
+          if (regNo === '-' || !regNo) {
+            const vehMatch = txt.match(/\[(.*?)\]/);
+            if (vehMatch && vehMatch[1]) regNo = vehMatch[1].trim();
+          }
 
           let tollAmt = 0.00, parkAmt = 0.00;
           const tollMatch = txt.match(/Tol:\s*RM\s*([\d\.]+)/i);
@@ -667,7 +676,7 @@
       });
     }
 
-    // FUNGSI ANALITIK YANG TELAH DIPERBETULKAN (1 PEMULANGAN = 1 PERJALANAN)
+    // FUNGSI ANALITIK TERPERKEMAS (CARTA KENDERAAN DIPANDU DARI ID_KAD & VEHICLES)
     function renderAnalyticsCharts() {
       const selectedMonth = document.getElementById('filterMonth').value;
       const selectedYear = document.getElementById('filterYear').value;
@@ -690,17 +699,32 @@
           if ((selectedMonth === 'ALL' || m === selectedMonth) && y === selectedYear) {
             totalTrips++;
 
+            // 1. Dapatkan Nama Pemandu
             const driverName = iss.NAMA_PENGGUNA || 'Pemandu Tidak Dinyatakan';
             driverTripCounts[driverName] = (driverTripCounts[driverName] || 0) + 1;
 
-            const txt = String(iss.TUJUAN || "");
-            const vehMatch = txt.match(/\[(.*?)\]/);
-            
-            if (vehMatch && vehMatch[1] && vehMatch[1].trim() !== '-' && vehMatch[1].trim() !== '') {
-              const regNo = vehMatch[1].trim();
+            // 2. Dapatkan No Kenderaan berdasarkan ID_KAD
+            let regNo = '-';
+            const cardObj = (dbData.cards || []).find(c => String(c.ID_KAD) === String(iss.ID_KAD));
+            if (cardObj) {
+              const vehObj = (dbData.vehicles || []).find(v => String(v.ID_KENDERAAN) === String(cardObj.ID_KENDERAAN));
+              if (vehObj) regNo = vehObj.NO_PENDAFTARAN;
+              else if (cardObj.NO_PENDAFTARAN) regNo = cardObj.NO_PENDAFTARAN;
+            }
+
+            // Jika tidak jumpa melalui cardObj, baca kurungan [...] dari TUJUAN
+            if (regNo === '-' || !regNo) {
+              const txt = String(iss.TUJUAN || "");
+              const vehMatch = txt.match(/\[(.*?)\]/);
+              if (vehMatch && vehMatch[1]) regNo = vehMatch[1].trim();
+            }
+
+            if (regNo !== '-' && regNo !== '') {
               vehicleTripCounts[regNo] = (vehicleTripCounts[regNo] || 0) + 1;
             }
 
+            // 3. Pengiraan Tol & Parkir
+            const txt = String(iss.TUJUAN || "");
             const tollMatch = txt.match(/Tol:\s*RM\s*([\d\.]+)/i);
             const parkMatch = txt.match(/Parkir:\s*RM\s*([\d\.]+)/i);
 
