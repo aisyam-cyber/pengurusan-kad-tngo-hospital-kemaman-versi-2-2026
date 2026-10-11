@@ -126,7 +126,7 @@
             </div>
           </div>
 
-          <!-- SENARAI KAD BELUM DIPULANGKAN -->
+          <!-- SENARAI KAD BELUM DIPULANGKAN (DENGAN DESTINASI TUGASAN) -->
           <div class="bg-white rounded-3xl border border-amber-200 shadow-lg overflow-hidden">
             <div class="bg-gradient-to-r from-amber-500 via-amber-600 to-amber-700 px-6 py-4 flex items-center justify-between text-white">
               <div class="flex items-center gap-3">
@@ -146,12 +146,13 @@
                     <th class="p-3">Kenderaan</th>
                     <th class="p-3">ID Kad / No. Kad</th>
                     <th class="p-3">Pemegang Semasa</th>
+                    <th class="p-3">Destinasi Tugasan</th>
                     <th class="p-3">Tarikh / Masa Diambil</th>
                     <th class="p-3 text-center">Status</th>
                   </tr>
                 </thead>
                 <tbody id="dashPendingCardsBody">
-                  <tr><td colspan="5" class="p-4 text-center text-slate-400">Semua kad berada dalam simpanan.</td></tr>
+                  <tr><td colspan="6" class="p-4 text-center text-slate-400">Semua kad berada dalam simpanan.</td></tr>
                 </tbody>
               </table>
             </div>
@@ -165,7 +166,7 @@
             </div>
           </div>
 
-          <!-- SENARAI REKOD PENGGUNAAN KAD TERKINI (DENGAN BAKI KAD & FILTER BULAN/TAHUN) -->
+          <!-- SENARAI REKOD PENGGUNAAN KAD TERKINI -->
           <div class="bg-white rounded-3xl border border-sky-200 shadow-lg overflow-hidden">
             <div class="bg-gradient-to-r from-hospital-800 via-hospital-900 to-navy-900 px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-white">
               <div class="flex items-center gap-3">
@@ -412,7 +413,7 @@
           </div>
         </section>
 
-        <!-- PULANGKAN KAD (TERMASUK RUMAH INPUT BAKI TERKINI RM) -->
+        <!-- PULANGKAN KAD -->
         <section id="view-returnCard" class="tab-view hidden max-w-2xl mx-auto">
           <div class="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-4">
             <h3 class="text-base font-bold text-slate-800 border-b pb-3">Borang Pemulangan Kad</h3>
@@ -576,7 +577,7 @@
 
       const total = pendingCardsList.length;
       if (total === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" class="p-4 text-center text-slate-400 font-semibold">Semua kad berada dalam simpanan. Tiada kad belum dipulangkan.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" class="p-4 text-center text-slate-400 font-semibold">Semua kad berada dalam simpanan. Tiada kad belum dipulangkan.</td></tr>';
         document.getElementById('pendingPageInfo').innerText = "Menunjukkan 0 daripada 0 rekod";
         document.getElementById('btnPendingPrev').disabled = true;
         document.getElementById('btnPendingNext').disabled = true;
@@ -597,12 +598,18 @@
         
         const lastIssue = (dbData.issues || []).find(iss => String(iss.ID_KAD) === String(c.ID_KENDERAAN || c.ID_KAD) && String(iss.JENIS_TRANSAKSI).toUpperCase() === 'PENGELUARAN');
         const issueTime = lastIssue ? lastIssue.TIMESTAMP : '-';
+        
+        // Dapatkan Destinasi Tugasan dan bersihkan tag [NO_PLAT]
+        let rawPurpose = lastIssue ? String(lastIssue.TUJUAN || '-') : '-';
+        let purposeText = rawPurpose.replace(/\[.*?\]/, '').trim();
+        if (!purposeText) purposeText = '-';
 
         tbody.innerHTML += `
           <tr class="border-b border-slate-100 hover:bg-amber-50/30 transition">
             <td class="p-3 font-bold text-slate-800"><i class="fa-solid fa-car text-amber-500 mr-2"></i>${regNo}</td>
             <td class="p-3 font-mono text-slate-600">${c.ID_KAD} (${c.NO_KAD_DISPLAY || c.NO_KAD})</td>
             <td class="p-3 font-semibold text-slate-700">${c.PEMEGANG_SEMASA || '-'}</td>
+            <td class="p-3 text-slate-700 font-medium max-w-xs truncate" title="${purposeText}">${purposeText}</td>
             <td class="p-3 text-slate-500">${issueTime}</td>
             <td class="p-3 text-center">
               <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-300 animate-pulse">
